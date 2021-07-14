@@ -81,6 +81,8 @@
     <modules>
         <module>annotations</module>
         <module>agent</module>
+        <module>agent-sdk</module>
+
         <module>agent-testweb</module>
         <module>agent-plugins</module>
         <module>bootstraps</module>
@@ -107,7 +109,6 @@
         <module>flink</module>
         <module>testcase</module>
         <module>batch</module>
-        <module>report</module>
 
         <module>hbase2-module</module>
     </modules>
@@ -136,15 +137,15 @@
 
 
         <spring4.version>4.3.27.RELEASE</spring4.version>
-        <spring5.version>5.2.12.RELEASE</spring5.version>
+        <spring5.version>5.3.6</spring5.version>
         <spring.version>${spring4.version}</spring.version>
         <spring.batch.version>4.2.4.RELEASE</spring.batch.version>
 
         <spring.security4.version>4.2.8.RELEASE</spring.security4.version>
-        <spring.security5.version>5.3.6.RELEASE</spring.security5.version>
+        <spring.security5.version>5.4.6</spring.security5.version>
         <spring.security.version>${spring.security4.version}</spring.security.version>
 
-        <spring.boot.version>2.3.8.RELEASE</spring.boot.version>
+        <spring.boot.version>2.4.5</spring.boot.version>
 
         <slf4j.version>1.7.30</slf4j.version>
         <log4j2-jdk7.version>2.12.1</log4j2-jdk7.version>
@@ -175,6 +176,10 @@
 
         <jjwt.version>0.9.1</jjwt.version>
         <jaxb.version>2.3.1</jaxb.version>
+
+        <zookeeper.version>3.4.14</zookeeper.version>
+        <curator.version>4.2.0</curator.version>
+        <curator.test.version>2.13.0</curator.test.version>
 
         <!-- maven-plugin -->
         <plugin.compiler.version>3.8.1</plugin.compiler.version>
@@ -210,7 +215,7 @@
         </dependency>
         <dependency>
             <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-library</artifactId>
+            <artifactId>hamcrest</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -497,6 +502,12 @@
                 <groupId>io.dropwizard.metrics</groupId>
                 <artifactId>metrics-servlets</artifactId>
                 <version>${metrics.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>com.papertrail</groupId>
+                        <artifactId>profiler</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -775,16 +786,30 @@
                 <version>4.4</version>
             </dependency>
             <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.20</version>
+            </dependency>
+            <dependency>
                 <groupId>commons-codec</groupId>
                 <artifactId>commons-codec</artifactId>
                 <!-- Codec 1.14 (mirrors) requires Java 7-->
-                <!-- Codec 1.11 (archives) requires Java 6-->
                 <version>1.14</version>
             </dependency>
             <dependency>
                 <groupId>commons-beanutils</groupId>
                 <artifactId>commons-beanutils</artifactId>
                 <version>1.9.4</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-math3</artifactId>
+                <version>3.6.1</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-digester</groupId>
+                <artifactId>commons-digester</artifactId>
+                <version>2.1</version>
             </dependency>
 
             <dependency>
@@ -854,15 +879,16 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
                 <version>4.13.2</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.hamcrest</groupId>
+                        <artifactId>hamcrest-core</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.hamcrest</groupId>
-                <artifactId>hamcrest-library</artifactId>
-                <version>2.2</version>
-            </dependency>
-            <dependency>
-                <groupId>org.hamcrest</groupId>
-                <artifactId>hamcrest-core</artifactId>
+                <artifactId>hamcrest</artifactId>
                 <version>2.2</version>
             </dependency>
             <dependency>
@@ -880,7 +906,7 @@
             <dependency>
                 <groupId>org.apache.zookeeper</groupId>
                 <artifactId>zookeeper</artifactId>
-                <version>3.4.14</version>
+                <version>${zookeeper.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.jboss.netty</groupId>
@@ -900,7 +926,7 @@
             <dependency>
                 <groupId>org.apache.curator</groupId>
                 <artifactId>curator-framework</artifactId>
-                <version>4.2.0</version>
+                <version>${curator.version}</version>
                 <exclusions>
                     <exclusion>
                         <artifactId>zookeeper</artifactId>
@@ -918,7 +944,7 @@
             <dependency>
                 <groupId>org.apache.curator</groupId>
                 <artifactId>curator-test</artifactId>
-                <version>2.13.0</version>
+                <version>${curator.test.version}</version>
                 <exclusions>
                     <exclusion>
                         <artifactId>zookeeper</artifactId>
@@ -965,6 +991,11 @@
             </dependency>
 
 
+            <dependency>
+                <groupId>joda-time</groupId>
+                <artifactId>joda-time</artifactId>
+                <version>2.10.10</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -1088,15 +1119,51 @@
                                 <goal>prepare-agent</goal>
                             </goals>
                         </execution>
+                        <execution>
+                            <id>report</id>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
                     </executions>
                     <configuration>
                         <skip>${plugin.jacoco.skip}</skip>
+                        <excludes>
+                            <exclude>com/navercorp/pinpoint/thrift/dto/**/*.class</exclude>
+                            <exclude>com/navercorp/pinpoint/common/util/apache/**/*.class</exclude>
+                            <exclude>com/navercorp/pinpoint/common/profiler/util/jsr166/**/*.class</exclude>
+                            <exclude>com/navercorp/pinpoint/profiler/util/jdk/**/*.class</exclude>
+                        </excludes>
                     </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
 
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>submodule update</id>
+                        <phase>initialize</phase>
+                        <inherited>false</inherited>
+                        <configuration>
+                            <executable>git</executable>
+                            <arguments>
+                                <argument>submodule</argument>
+                                <argument>update</argument>
+                                <argument>--init</argument>
+                                <argument>--recursive</argument>
+                            </arguments>
+                        </configuration>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-resources-plugin</artifactId>
@@ -1137,6 +1204,33 @@
                     <jvm>${test.jdk.home}/bin/java</jvm>
                     <forkMode>once</forkMode>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${plugin.failsafe.version}</version>
+                <configuration>
+                    <jvm>${test.jdk.home}/bin/java</jvm>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/*Base</exclude>
+                            </excludes>
+                            <includes>
+                                <include>**/*IT.java</include>
+                            </includes>
+                            <!-- AbstractPinpointPluginTestSuite needs this to resolve
+                            path of required jars -->
+                            <useSystemClassLoader>false</useSystemClassLoader>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

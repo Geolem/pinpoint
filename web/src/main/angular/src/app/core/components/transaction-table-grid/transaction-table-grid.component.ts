@@ -27,17 +27,20 @@ export class TransactionTableGridComponent implements OnInit, OnChanges {
     @Input() rowData: IGridData[];
     @Input() addData: IGridData[];
     @Input() resized: any;
-    @Input() currentTraceId: string;
+    @Input() selectedTransactionId: string;
     @Input() timezone: string;
     @Input() dateFormat: string;
+    @Input() dataEmptyText: string;
     @Output() outSelectTransaction = new EventEmitter<{[key: string]: any}>();
     @Output() outSelectTransactionView = new EventEmitter<{[key: string]: any}>();
 
     gridOptions: GridOptions;
+    overlayNoRowsTemplate: string;
 
     constructor() {}
     ngOnInit() {
         this.initGridOptions();
+        this.overlayNoRowsTemplate = `<span class="l-overlay-template l-no-rows">${this.dataEmptyText}</span>`;
     }
 
     ngOnChanges(changes: SimpleChanges) {
@@ -79,7 +82,7 @@ export class TransactionTableGridComponent implements OnInit, OnChanges {
                 return params.data.exception === 1 ? 'ag-row-exception' : '';
             },
             onCellClicked: (params: any) => {
-                if ( params.colDef.field === 'path' ) {
+                if (params.colDef.field === 'path') {
                     const tag = params.event.target.tagName.toUpperCase();
                     if (tag === 'I' || tag === 'BUTTON' ) {
                         this.outSelectTransactionView.next({
@@ -91,33 +94,42 @@ export class TransactionTableGridComponent implements OnInit, OnChanges {
                         return;
                     }
                 }
-                if ( this.currentTraceId === params.data.traceId ) {
+
+                const selectedTransactionId = `${params.data.agentId}${params.data.spanId}${params.data.traceId}${params.data.collectorAcceptTime}`;
+
+                if (this.selectedTransactionId === selectedTransactionId) {
                     return;
                 }
-                this.currentTraceId = params.data.traceId;
+
                 this.outSelectTransaction.next({
+                    agentId: params.data.agentId,
+                    spanId: params.data.spanId,
                     traceId: params.data.traceId,
                     collectorAcceptTime: params.data.collectorAcceptTime,
                     elapsed: params.data.responseTime
                 });
-            }
+            },
+            getRowNodeId: (data) => `${data.agentId}${data.spanId}${data.traceId}${data.collectorAcceptTime}`
         };
     }
 
-    onGridReady(params: GridOptions): void {
-        this.gridOptions.api.forEachNode((node) => {
-            if (this.currentTraceId === node.data.traceId) {
-                node.setSelected(true);
-            }
-        });
-    }
-
-    onGridSizeChanged(params: GridOptions): void {
+    onGridReady(_: GridOptions): void {}
+    onGridSizeChanged(_: GridOptions): void {
         this.gridOptions.api.sizeColumnsToFit();
     }
 
+    // TODO: Set selected row whenever data gets updated?
     onRendered(): void {
         this.gridOptions.api.sizeColumnsToFit();
+
+        if (!this.selectedTransactionId) {
+            return;
+        }
+
+        const selectedRow = this.gridOptions.api.getRowNode(this.selectedTransactionId);
+
+        selectedRow.setSelected(true, true);
+        this.gridOptions.api.ensureIndexVisible(selectedRow.rowIndex, 'middle');
     }
 
     private makeColumnDefs(): any {

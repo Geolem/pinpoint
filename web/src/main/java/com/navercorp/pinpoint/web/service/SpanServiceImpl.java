@@ -20,6 +20,7 @@ import com.navercorp.pinpoint.common.hbase.bo.ColumnGetCount;
 import com.navercorp.pinpoint.common.profiler.sql.DefaultSqlParser;
 import com.navercorp.pinpoint.common.profiler.sql.OutputParameterParser;
 import com.navercorp.pinpoint.common.profiler.sql.SqlParser;
+import com.navercorp.pinpoint.common.util.LineNumber;
 import com.navercorp.pinpoint.common.profiler.util.TransactionId;
 import com.navercorp.pinpoint.common.server.bo.AnnotationBo;
 import com.navercorp.pinpoint.common.server.bo.ApiMetaDataBo;
@@ -54,12 +55,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * @author emeroad
@@ -105,21 +108,24 @@ public class SpanServiceImpl implements SpanService {
     }
 
     @Override
-    public SpanResult selectSpan(TransactionId transactionId, long selectedSpanHint) {
-        return selectSpan(transactionId, selectedSpanHint, null);
+    public SpanResult selectSpan(TransactionId transactionId, Predicate<SpanBo> filter) {
+        return selectSpan(transactionId, filter, null);
     }
 
     @Override
-    public SpanResult selectSpan(TransactionId transactionId, long selectedSpanHint, ColumnGetCount columnGetCount) {
+    public SpanResult selectSpan(TransactionId transactionId, Predicate<SpanBo> filter, ColumnGetCount columnGetCount) {
         Objects.requireNonNull(transactionId, "transactionId");
+        Objects.requireNonNull(filter, "filter");
 
         final List<SpanBo> spans = traceDao.selectSpan(transactionId, columnGetCount);
+        logger.debug("selectSpan spans:{}", spans.size());
+
         populateAgentName(spans);
         if (CollectionUtils.isEmpty(spans)) {
             return new SpanResult(TraceState.State.ERROR, new CallTreeIterator(null));
         }
 
-        final SpanResult result = order(spans, selectedSpanHint);
+        final SpanResult result = order(spans, filter);
         final CallTreeIterator callTreeIterator = result.getCallTree();
         final List<Align> values = callTreeIterator.values();
 
@@ -134,21 +140,44 @@ public class SpanServiceImpl implements SpanService {
     }
 
     @Override
-    public void populateAgentName(Collection<SpanBo> spanBoList) {
+    public void populateAgentName(List<SpanBo> spanBoList) {
         if (CollectionUtils.isEmpty(spanBoList)) {
             return;
         }
-        Map<AgentIdStartTimeKey, Optional<String>> nameMap = new HashMap<>(spanBoList.size());
-        for (SpanBo span : spanBoList) {
-            final String agentId = span.getAgentId();
-            final long agentStartTime = span.getAgentStartTime();
-            final AgentIdStartTimeKey idStartTimeKey = new AgentIdStartTimeKey(agentId, agentStartTime);
-            if (!nameMap.containsKey(idStartTimeKey)) {
-                nameMap.put(idStartTimeKey, getAgentName(agentId, agentStartTime));
-            }
-            final Optional<String> optionalName = nameMap.get(idStartTimeKey);
-            span.setAgentName(optionalName.orElse(StringUtils.EMPTY));
+        List<AgentIdStartTimeKey> query = spanBoList.stream()
+                .map(this::newAgentStartTimeKey)
+                .collect(Collectors.toList());
+
+        Map<AgentIdStartTimeKey, Optional<String>> agentNameMap = this.getAgentName(query);
+
+        bindAgentName(spanBoList, agentNameMap);
+    }
+
+    public AgentIdStartTimeKey newAgentStartTimeKey(SpanBo spanBo) {
+        return new AgentIdStartTimeKey(spanBo.getAgentId(), spanBo.getAgentStartTime());
+    }
+
+    private void bindAgentName(List<SpanBo> list, Map<AgentIdStartTimeKey, Optional<String>> agentNameMap) {
+        for (SpanBo spanBo : list) {
+            AgentIdStartTimeKey key = new AgentIdStartTimeKey(spanBo.getAgentId(), spanBo.getAgentStartTime());
+            Optional<String> agentName = agentNameMap.get(key);
+            spanBo.setAgentName(agentName.orElse(StringUtils.EMPTY));
         }
+    }
+
+    private Map<AgentIdStartTimeKey, Optional<String>> getAgentName(List<AgentIdStartTimeKey> spanBoList) {
+        if (CollectionUtils.isEmpty(spanBoList)) {
+            return Collections.emptyMap();
+        }
+
+        Map<AgentIdStartTimeKey, Optional<String>> nameMap = new HashMap<>(spanBoList.size());
+        for (AgentIdStartTimeKey key : spanBoList) {
+            if (!nameMap.containsKey(key)) {
+                Optional<String> agentName = getAgentName(key.getAgentId(), key.getAgentStartTime());
+                nameMap.put(key, agentName);
+            }
+        }
+        return nameMap;
     }
 
 
@@ -317,10 +346,8 @@ public class SpanServiceImpl implements SpanService {
                     String apiString = AnnotationUtils.findApiAnnotation(annotationBoList);
                     // annotation base api
                     if (apiString != null) {
-                        ApiMetaDataBo apiMetaDataBo = new ApiMetaDataBo(align.getAgentId(), align.getStartTime(), apiId);
-                        apiMetaDataBo.setApiInfo(apiString);
-                        apiMetaDataBo.setLineNumber(-1);
-                        apiMetaDataBo.setMethodTypeEnum(MethodTypeEnum.DEFAULT);
+                        ApiMetaDataBo apiMetaDataBo = new ApiMetaDataBo(align.getAgentId(), align.getStartTime(), apiId,
+                                LineNumber.NO_LINE_NUMBER, MethodTypeEnum.DEFAULT, apiString);
 
                         AnnotationBo apiAnnotation = new AnnotationBo(AnnotationKey.API_METADATA.getCode(), apiMetaDataBo);
                         annotationBoList.add(apiAnnotation);
@@ -419,9 +446,7 @@ public class SpanServiceImpl implements SpanService {
         final List<StringMetaDataBo> metaDataList = stringMetaDataDao.getStringMetaData(agentId, agentStartTime, cacheId);
         if (CollectionUtils.isEmpty(metaDataList)) {
             logger.warn("StringMetaData not Found agent:{}, cacheId{}, agentStartTime:{}", agentId, cacheId, agentStartTime);
-            StringMetaDataBo stringMetaDataBo = new StringMetaDataBo(agentId, agentStartTime, cacheId);
-            stringMetaDataBo.setStringValue("STRING-META-DATA-NOT-FOUND");
-            return stringMetaDataBo;
+            return new StringMetaDataBo(agentId, agentStartTime, cacheId, "STRING-META-DATA-NOT-FOUND");
         }
         if (metaDataList.size() == 1) {
             return metaDataList.get(0);
@@ -448,7 +473,7 @@ public class SpanServiceImpl implements SpanService {
     }
 
     private String getApiInfo(ApiMetaDataBo apiMetaDataBo) {
-        if (apiMetaDataBo.getLineNumber() != -1) {
+        if (LineNumber.isLineNumber(apiMetaDataBo.getLineNumber())) {
             return apiMetaDataBo.getApiInfo() + ":" + apiMetaDataBo.getLineNumber();
         } else {
             return apiMetaDataBo.getApiInfo();
@@ -463,8 +488,8 @@ public class SpanServiceImpl implements SpanService {
         void replacement(Align align, List<AnnotationBo> annotationBoList);
     }
 
-    private SpanResult order(List<SpanBo> spans, long selectedSpanHint) {
-        SpanAligner spanAligner = new SpanAligner(spans, selectedSpanHint, serviceTypeRegistryService);
+    private SpanResult order(List<SpanBo> spans, Predicate<SpanBo> filter) {
+        SpanAligner spanAligner = new SpanAligner(spans, filter, serviceTypeRegistryService);
         final CallTree callTree = spanAligner.align();
 
         return new SpanResult(spanAligner.getMatchType(), callTree.iterator());
@@ -475,29 +500,5 @@ public class SpanServiceImpl implements SpanService {
         final AgentInfo agentInfo = this.agentInfoService.getAgentInfoNoStatus(agentId, agentStartTime, deltaTimeInMilli);
         return agentInfo == null ? Optional.empty() : Optional.ofNullable(agentInfo.getAgentName());
     }
-
-    private static class AgentIdStartTimeKey {
-        private final String agentId;
-        private final long agentStartTime;
-
-        public AgentIdStartTimeKey(String agentId, long agentStartTime) {
-            this.agentId = agentId;
-            this.agentStartTime = agentStartTime;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            AgentIdStartTimeKey that = (AgentIdStartTimeKey) o;
-            return agentStartTime == that.agentStartTime && Objects.equals(agentId, that.agentId);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(agentId, agentStartTime);
-        }
-    }
-
 }
 

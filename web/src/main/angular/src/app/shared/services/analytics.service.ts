@@ -20,6 +20,7 @@ export enum TRACKED_EVENT_LIST {
     SHOW_GROUPED_LINK_VIEW = 'Show Grouped Link View',
     CLICK_SCATTER_SETTING = 'Click Scatter Setting',
     DOWNLOAD_SCATTER = 'Download Scatter',
+    CHANGE_Y_RANGE_ON_SCATTER = 'Change Y Range on Scatter',
     GO_TO_FULL_SCREEN_SCATTER = 'Go to FullScreen Scatter',
     CLICK_RESPONSE_GRAPH = 'Click Response Graph',
     CLICK_RESPONSE_AVG_MAX_GRAPH = 'Click Response Avg Max Graph',
@@ -137,7 +138,8 @@ export enum TRACKED_EVENT_LIST {
     RESUME_DATA_LOAD_ON_FILTERED_MAP_PAGE = 'Resume Data Load on FilteredMap Page',
     SWITCH_TRANSACTION_VIEW_TYPE_THROUGH_TAB = 'Switch Transaction View Type through Tab',
     OPEN_LOG_PAGE_THROUGH_TAB = 'Open Log Page through Tab',
-    MOVE_NODE_IN_SERVER_MAP = 'Move Node in Server Map'
+    MOVE_NODE_IN_SERVER_MAP = 'Move Node in Server Map',
+    CHANGE_THEME = 'Change Theme'
 }
 
 @Injectable()

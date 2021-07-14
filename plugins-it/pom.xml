@@ -78,10 +78,11 @@
         <module>oracledb-it</module>
         <module>paho-mqtt-it</module>
         <module>kafka-it</module>
+        <module>lambda-it</module>
     </modules>
 
     <properties>
-        <testcontainers.version>1.14.3</testcontainers.version>
+        <testcontainers.version>1.15.3</testcontainers.version>
     </properties>
 
     <dependencyManagement>
@@ -172,33 +173,7 @@
                         <skip>true</skip>
                     </configuration>
                 </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>${plugin.failsafe.version}</version>
-                    <configuration>
-                        <jvm>${test.jdk.home}/bin/java</jvm>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>integration-test</goal>
-                                <goal>verify</goal>
-                            </goals>
-                            <configuration>
-                                <excludes>
-                                    <exclude>**/*Base</exclude>
-                                </excludes>
-                                <includes>
-                                    <include>**/*IT.java</include>
-                                </includes>
-                                <!-- AbstractPinpointPluginTestSuite needs this to resolve
-                                path of required jars -->
-                                <useSystemClassLoader>false</useSystemClassLoader>
-                            </configuration>
-                        </execution>
-                    </executions>
-                </plugin>
+
             </plugins>
         </pluginManagement>
         
